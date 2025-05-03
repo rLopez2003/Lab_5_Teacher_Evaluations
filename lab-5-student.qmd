@@ -162,6 +162,7 @@ variable included in the `teacher_evals_codebook.pdf`.
 # code chunk for loading packages
 library(tidyverse)
 library(janitor)
+library (dplyr)
 
 ```
 
@@ -194,8 +195,11 @@ identified by?**
 #| label: row-identification
 # you may want to use code to answer this question
 
+teacher_evals %>% 
+  select(teacher_id)
 
 
+#The teacher_id gives us the row of identification. 
 ```
 
 **5. Use *one*`dplyr` pipeline to clean the data by:**
@@ -216,6 +220,22 @@ identified by?**
 #| label: data-cleaning
 # code chunk for Q4
 
+teacher_evals_clean <- teacher_evals %>% 
+  rename(sex = gender) %>%  #renamed sex to gender 
+  filter(no_participants >= 10) %>%
+  mutate(
+    teacher_id = as.character(teacher_id),
+    course_id = as.character(course_id), 
+    question_no = as.factor (question_no), 
+    academic_degree = as.factor(academic_degree),
+    seniority= as.integer(seniority),
+    sex = as.factor(sex)
+  ) %>%
+select(course_id, teacher_id, question_no, academic_degree, seniority, sex)
+
+# Save cleaned data
+write_csv(teacher_evals_clean, "data-clean/teacher_evals_clean.csv")
+
 ```
 
 **6. How many unique instructors and unique courses are present in the
@@ -225,6 +245,11 @@ cleaned dataset?**
 #| label: unique-courses
 # code chunk for Q5
 
+teacher_evals_clean %>%
+  summarise(
+    unique_instructors = n_distinct(teacher_id),
+    unique_courses = n_distinct(course_id)
+  )
 ```
 
 **7. One teacher-course combination has some missing values, coded as
@@ -235,6 +260,12 @@ variable are the missing values in?**
 #| label: uncovering-missing-values
 # code chunk for Q6
 
+
+teacher_evals_clean %>%
+  filter(if_any(everything(), is.na)) %>%
+  select(teacher_id, course_id) %>%
+  distinct() %>%
+summarise(across(everything(), ~sum(is.na(.))))
 ```
 
 **8. What are the demographics of the instructors in this study?
@@ -244,7 +275,13 @@ summarize your findings in \~3 complete sentences.**
 ```{r}
 #| label: exploring-demographics-of-instructors
 # code chunk for Q7
-
+teacher_evals_clean %>%
+  distinct(teacher_id, academic_degree, seniority, sex) %>%
+  summarise(
+    degree_counts = list(table(academic_degree)),
+    seniority_range = paste0(min(seniority, na.rm = TRUE), " to ", max(seniority, na.rm = TRUE), " years"),
+    sex_counts = list(table(sex))
+  )
 ```
 
 **9. Each course seems to have used a different subset of the nine
@@ -254,6 +291,12 @@ nine questions?**
 ```{r}
 #| label: teacher-course-asked-every-question
 # code chunk for Q8
+
+teacher_evals_clean %>%
+  group_by(teacher_id, course_id) %>%
+  summarise(num_questions = n_distinct(question_no)) %>%
+  filter(num_questions == 9) %>%
+  count()
 
 ```
 
@@ -267,6 +310,24 @@ courses?**
 #| label: question-1-high-low
 # code chunk for Q9
 
+teacher_evals %>%
+  filter(question_no == 1) %>%
+  group_by(teacher_id) %>%
+  summarise(avg_rating_q1 = mean(SET_score_avg, na.rm = TRUE)) %>%
+  arrange(desc(avg_rating_q1)) %>%
+  slice_head(n = 1) %>%
+    
+  bind_rows(
+      
+    teacher_evals_clean %>%
+      filter(question_no == 1) %>%
+      group_by(teacher_id) %>%
+      summarise(avg_rating_q1 = mean(SET_score_avg, na.rm = TRUE)) %>%
+      arrange(avg_rating_q1) %>%
+      slice_head(n = 1)
+  )
+
+
 ```
 
 **11. Which instructors with one year of experience had the highest and
@@ -277,6 +338,23 @@ across all their courses?**
 #| label: one-year-experience-failing-students
 # code chunk for Q10
 
+
+teacher_evals_clean %>%
+  filter(seniority == 1) %>%
+  group_by(teacher_id) %>%
+  summarise(avg_fail_pct = mean(percent_failed_cur, na.rm = TRUE)) %>%
+  arrange(desc(avg_fail_pct)) %>%
+  slice_head(n = 1) %>%
+  bind_rows(
+    teacher_evals_clean %>%
+      filter(seniority == 1) %>%
+      group_by(teacher_id) %>%
+      summarise(avg_fail_pct = mean(percent_failed_cur, na.rm = TRUE)) %>%
+      arrange(avg_fail_pct) %>%
+      slice_head(n = 1)
+  )
+
+
 ```
 
 **12. Which female instructors with either a doctorate or professional
@@ -286,5 +364,18 @@ to the evaluation across all their courses?**
 ```{r}
 #| label: female-instructor-student-response
 # code chunk for Q11
-
+teacher_evals_clean %>%
+  filter(sex == "female", academic_degree %in% c("doctorate", "professional")) %>%
+  group_by(teacher_id) %>%
+  summarise(avg_response = mean(resp_share, na.rm = TRUE)) %>%
+  arrange(desc(avg_response)) %>%
+  slice_head(n = 1) %>%
+  bind_rows(
+    teacher_evals_clean %>%
+      filter(sex == "female", academic_degree %in% c("doctorate", "professional")) %>%
+      group_by(teacher_id) %>%
+      summarise(avg_response = mean(resp_share, na.rm = TRUE)) %>%
+      arrange(avg_response) %>%
+      slice_head(n = 1)
+  )
 ```
